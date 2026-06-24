@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1 class="text-xl font-semibold mb-4">Mapa ogrodu</h1>
+
+<div class="grid grid-cols-3 gap-6">
+  <div class="col-span-2">
+    <div class="bg-white rounded-lg shadow p-3 mb-4">
+      <div
+        id="map-area"
+        class="relative w-full bg-green-100 rounded overflow-hidden cursor-crosshair"
+        style="aspect-ratio: 4/3; {% if map_image_path %}background-image:url('/maps/{{ map_image_path }}'); background-size:cover; background-position:center;{% endif %}"
+      >
+        {% if not map_image_path %}
+        <div class="absolute inset-0 flex items-center justify-center text-green-700 text-sm">
+          Brak zdjęcia mapy - wgraj zdjęcie/szkic ogrodu poniżej, albo kliknij tutaj, żeby
+          dodać rośliny bez tła (pozycje względne).
+        </div>
+        {% endif %}
+        {% for p in plants %}
+        {% if p.x_pct is not none and p.y_pct is not none %}
+        <div
+          class="absolute -translate-x-1/2 -translate-y-1/2 group"
+          style="left:{{ p.x_pct }}%; top:{{ p.y_pct }}%;"
+          title="{{ p.name }}{% if p.scientific_name %} ({{ p.scientific_name }}){% endif %}"
+        >
+          <div class="w-4 h-4 rounded-full bg-red-600 border-2 border-white shadow"></div>
+          <div class="hidden group-hover:block absolute left-1/2 -translate-x-1/2 top-5 bg-black text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10">
+            {{ p.name }}{% if p.zone %} - {{ p.zone }}{% endif %}
+          </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+      <div class="text-xs text-gray-500 mt-2">
+        Wybrana pozycja na mapie: <span id="picked-pos" class="font-mono">brak - kliknij na mapie</span>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-3 mb-4">
+      <h2 class="font-semibold mb-2 text-sm">Zmień zdjęcie/szkic mapy</h2>
+      <form action="/garden/map-image" method="post" enctype="multipart/form-data" class="flex gap-2">
+        <input type="file" name="photo" accept="image/*" required class="border rounded p-2 flex-1 text-sm" />
+        <button type="submit" class="bg-green-600 text-white rounded px-3 text-sm hover:bg-green-700">Wgraj</button>
+      </form>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-3">
+      <h2 class="font-semibold mb-2 text-sm">🤖 Rozpoznaj rośliny ze zdjęcia (AI)</h2>
+      <div class="flex gap-2 mb-2">
+        <input type="file" id="ai-photo" accept="image/*" class="border rounded p-2 flex-1 text-sm" />
+        <button onclick="identifyPlants()" class="bg-purple-600 text-white rounded px-3 text-sm hover:bg-purple-700">
+          Analizuj
+        </button>
+      </div>
+      <div id="ai-status" class="text-xs text-gray-500"></div>
+      <ul id="ai-suggestions" class="mt-2 flex flex-col gap-2"></ul>
+    </div>
+  </div>
+
+  <div>
+    <div class="bg-white rounded-lg shadow p-3 mb-4">
+      <h2 class="font-semibold mb-2 text-sm">Dodaj roślinę</h2>
+      <form action="/plants" method="post" enctype="multipart/form-data" class="flex flex-col gap-2" id="add-plant-form">
+        <input type="text" name="name" id="plant-name" placeholder="Nazwa (np. Lawenda)" required class="border rounded p-2 text-sm" />
+        <input type="text" name="scientific_name" id="plant-scientific" placeholder="Nazwa łacińska (opcjonalnie)" class="border rounded p-2 text-sm" />
+        <input type="text" name="zone" placeholder="Strefa (opcjonalnie)" class="border rounded p-2 text-sm" />
+        <textarea name="notes" id="plant-notes" placeholder="Notatki (opcjonalnie)" class="border rounded p-2 text-sm"></textarea>
+        <input type="file" name="photo" accept="image/*" class="border rounded p-2 text-sm" />
+        <input type="hidden" name="x_pct" id="x_pct" />
+        <input type="hidden" name="y_pct" id="y_pct" />
+        <input type="hidden" name="added_via" id="added_via" value="manual" />
+        <button type="submit" class="bg-green-600 text-white rounded p-2 text-sm hover:bg-green-700">
+          Zapisz na mapie
+        </button>
+        <div class="text-xs text-gray-500">Najpierw kliknij pozycję na mapie po lewej.</div>
+      </form>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-3">
+      <h2 class="font-semibold mb-2 text-sm">Rośliny w ogrodzie ({{ plants|length }})</h2>
+      <ul class="divide-y text-sm">
+        {% for p in plants %}
+        <li class="py-2">
+          <div class="flex justify-between items-start gap-2">
+            <div>
+              <div class="font-medium">{{ p.name }}</div>
+              {% if p.scientific_name %}<div class="text-xs italic text-gray-500">{{ p.scientific_name }}</div>{% endif %}
+              {% if p.zone %}<div class="text-xs text-gray-500">Strefa: {{ p.zone }}</div>{% endif %}
+              {% if p.notes %}<div class="text-xs">{{ p.notes }}</div>{% endif %}
+              <div class="text-xs text-gray-400">{{ "dodano przez AI" if p.added_via == "ai" else "dodano ręcznie" }}</div>
+            </div>
+            <form action="/plants/{{ p.id }}/delete" method="post">
+              <button type="submit" class="text-red-500 text-xs hover:underline">usuń</button>
+            </form>
+          </div>
+        </li>
+        {% else %}
+        <li class="text-gray-400 py-2">Brak roślin - dodaj pierwszą po lewej.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+const mapArea = document.getElementById('map-area');
+mapArea.addEventListener('click', (e) => {
+  const rect = mapArea.getBoundingClientRect();
+  const xPct = ((e.clientX - rect.left) / rect.width) * 100;
+  const yPct = ((e.clientY - rect.top) / rect.height) * 100;
+  document.getElementById('x_pct').value = xPct.toFixed(2);
+  document.getElementById('y_pct').value = yPct.toFixed(2);
+  document.getElementById('picked-pos').innerText = `x=${xPct.toFixed(1)}%, y=${yPct.toFixed(1)}%`;
+});
+
+async function identifyPlants() {
+  const input = document.getElementById('ai-photo');
+  const status = document.getElementById('ai-status');
+  const list = document.getElementById('ai-suggestions');
+  list.innerHTML = '';
+  if (!input.files.length) {
+    status.innerText = 'Wybierz najpierw zdjęcie.';
+    return;
+  }
+  status.innerText = 'Analizuję zdjęcie...';
+  const formData = new FormData();
+  formData.append('photo', input.files[0]);
+  try {
+    const res = await fetch('/plants/identify', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data.error) {
+      status.innerText = data.error;
+      return;
+    }
+    status.innerText = `Znaleziono ${data.suggestions.length} propozycji - kliknij pozycję na mapie, potem "Użyj".`;
+    data.suggestions.forEach((s) => {
+      const li = document.createElement('li');
+      li.className = 'border rounded p-2 text-sm flex justify-between items-center gap-2';
+      li.innerHTML = `
+        <div>
+          <div class="font-medium">${s.name}</div>
+          ${s.scientific_name ? `<div class="text-xs italic text-gray-500">${s.scientific_name}</div>` : ''}
+          ${s.notes ? `<div class="text-xs text-gray-500">${s.notes}</div>` : ''}
+        </div>
+        <button class="bg-purple-100 text-purple-700 text-xs rounded px-2 py-1 hover:bg-purple-200 shrink-0">Użyj</button>
+      `;
+      li.querySelector('button').addEventListener('click', () => {
+        document.getElementById('plant-name').value = s.name || '';
+        document.getElementById('plant-scientific').value = s.scientific_name || '';
+        document.getElementById('plant-notes').value = s.notes || '';
+        document.getElementById('added_via').value = 'ai';
+        status.innerText = 'Teraz kliknij pozycję na mapie po lewej i zapisz formularz.';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+      list.appendChild(li);
+    });
+  } catch (e) {
+    status.innerText = 'Błąd: ' + e;
+  }
+}
+</script>
+{% endblock %}

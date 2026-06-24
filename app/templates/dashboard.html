@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="grid grid-cols-3 gap-4 mb-6">
+  <div class="bg-white rounded-lg shadow p-4">
+    <div class="text-sm text-gray-500">Podlewania (14 dni)</div>
+    <div class="text-3xl font-bold text-blue-600">{{ watering_count }}</div>
+  </div>
+  <div class="bg-white rounded-lg shadow p-4">
+    <div class="text-sm text-gray-500">Koszenia (14 dni)</div>
+    <div class="text-3xl font-bold text-green-600">{{ mowing_count }}</div>
+  </div>
+  <div class="bg-white rounded-lg shadow p-4">
+    <div class="text-sm text-gray-500">Pogoda</div>
+    <div id="weather-now" class="text-lg">ładowanie...</div>
+  </div>
+</div>
+
+<div class="bg-white rounded-lg shadow p-4 mb-6">
+  <h2 class="font-semibold mb-2">Opady vs. dni (7 dni)</h2>
+  <canvas id="weatherChart" height="80"></canvas>
+</div>
+
+<div class="bg-white rounded-lg shadow p-4 mb-6">
+  <div class="flex items-center justify-between">
+    <h2 class="font-semibold mb-2">🤖 Wnioski AI (Gemini)</h2>
+    <button onclick="runAnalysis()" class="bg-purple-600 text-white px-3 py-1.5 rounded text-sm hover:bg-purple-700">
+      Odśwież teraz
+    </button>
+  </div>
+  {% if latest_insight %}
+  <div class="text-xs text-gray-500 mb-1">
+    Wygenerowano {{ latest_insight.timestamp.strftime("%Y-%m-%d %H:%M") }}
+    ({{ "automatycznie" if latest_insight.triggered_by == "scheduler" else "ręcznie" }},
+    na podstawie ostatnich {{ latest_insight.period_days }} dni)
+  </div>
+  {% else %}
+  <div class="text-xs text-gray-500 mb-1">
+    Brak jeszcze zapisanych wniosków - scheduler generuje je automatycznie co 24h
+    (wymaga GEMINI_API_KEY w .env), albo kliknij "Odśwież teraz".
+  </div>
+  {% endif %}
+  <div id="analysis-result" class="mt-2 text-sm whitespace-pre-wrap">{{ latest_insight.summary_text if latest_insight else "" }}</div>
+</div>
+
+<div class="grid grid-cols-2 gap-6">
+  <div class="bg-white rounded-lg shadow p-4">
+    <h2 class="font-semibold mb-2">Dodaj akcję ogrodową</h2>
+    <form action="/actions" method="post" enctype="multipart/form-data" class="flex flex-col gap-2">
+      <select name="action_type" class="border rounded p-2">
+        <option value="fertilizing">Nawożenie</option>
+        <option value="planting">Sadzenie</option>
+        <option value="pruning">Przycinanie</option>
+        <option value="pest_control">Oprysk / ochrona</option>
+        <option value="watering_manual">Podlewanie ręczne</option>
+        <option value="other">Inne</option>
+      </select>
+      <input type="text" name="description" placeholder="Opis" class="border rounded p-2" />
+      <input type="text" name="product" placeholder="Produkt (np. nawóz X)" class="border rounded p-2" />
+      <input type="text" name="amount" placeholder="Dawka (np. 50g/m2)" class="border rounded p-2" />
+      <input type="text" name="zone" placeholder="Strefa ogrodu" class="border rounded p-2" />
+      <input type="file" name="photo" accept="image/*" class="border rounded p-2" />
+      <button type="submit" class="bg-green-600 text-white rounded p-2 hover:bg-green-700">Zapisz</button>
+    </form>
+  </div>
+
+  <div class="bg-white rounded-lg shadow p-4">
+    <h2 class="font-semibold mb-2">Ostatnie akcje</h2>
+    <ul class="divide-y">
+      {% for a in recent_actions %}
+      <li class="py-2">
+        <div class="text-sm text-gray-500">{{ a.timestamp.strftime("%Y-%m-%d %H:%M") }}</div>
+        <div class="font-medium">{{ a.action_type }} {% if a.zone %}— {{ a.zone }}{% endif %}</div>
+        {% if a.description %}<div class="text-sm">{{ a.description }}</div>{% endif %}
+        {% if a.photo_path %}<img src="/photos/{{ a.photo_path.replace('photos/', '') }}" class="mt-1 h-20 rounded" />{% endif %}
+      </li>
+      {% else %}
+      <li class="text-gray-400 py-2">Brak akcji - dodaj pierwszą po lewej.</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+
+<script>
+async function loadWeather() {
+  const res = await fetch('/api/weather/forecast');
+  const data = await res.json();
+  const c = data.current;
+  document.getElementById('weather-now').innerText =
+    `${c.temperature_2m}°C, opady ${c.precipitation}mm, wilgotność ${c.relative_humidity_2m}%`;
+
+  const hist = await (await fetch('/api/weather/history?days=7')).json();
+  const labels = hist.map(h => h.timestamp.slice(0, 16));
+  const precip = hist.map(h => h.precipitation_mm);
+  new Chart(document.getElementById('weatherChart'), {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Opady (mm)', data: precip, backgroundColor: '#3b82f6' }] },
+  });
+}
+loadWeather();
+
+async function runAnalysis() {
+  const el = document.getElementById('analysis-result');
+  el.innerText = 'Analizuję...';
+  try {
+    const res = await fetch('/api/analysis', { method: 'POST' });
+    const data = await res.json();
+    el.innerText = data.analysis || data.error || 'Brak odpowiedzi.';
+  } catch (e) {
+    el.innerText = 'Błąd: ' + e;
+  }
+}
+</script>
+{% endblock %}
