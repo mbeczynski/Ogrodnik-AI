@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ogrodnik.fullname" . }}
+  labels:
+    {{- include "ogrodnik.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "ogrodnik.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ogrodnik.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: ogrodnik-ai
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secretName }}
+          volumeMounts:
+            - name: data-volume
+              mountPath: /app/data
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+        - name: ogrodnik-db
+          image: "{{ .Values.dbImage.repository }}:{{ .Values.dbImage.tag }}"
+          imagePullPolicy: {{ .Values.dbImage.pullPolicy }}
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SQLITE_DATABASE
+              value: "ogrodnik.db"
+          volumeMounts:
+            - name: data-volume
+              mountPath: /data
+          resources:
+            {{- toYaml .Values.dbResources | nindent 12 }}
+
+      volumes:
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: {{ include "ogrodnik.fullname" . }}-data-pvc

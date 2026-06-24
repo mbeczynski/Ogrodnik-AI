@@ -1,0 +1,13 @@
+.git
+.github
+.idea
+.vscode
+.venv
+.env
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/*.db
+**/*.db-journal
+data/

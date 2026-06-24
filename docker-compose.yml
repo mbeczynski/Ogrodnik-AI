@@ -1,7 +1,9 @@
 services:
   ogrodnik-ai:
-    build: .
-    image: ogrodnik-ai:latest
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+    image: ghcr.io/mbeczynski/ogrodnik-ai:latest
     container_name: ogrodnik-ai
     restart: unless-stopped
     ports:
@@ -18,5 +20,22 @@ services:
     # extra_hosts:
     #   - "host.docker.internal:host-gateway"
 
+  ogrodnik-db:
+    build:
+      context: .
+      dockerfile: docker/db.Dockerfile
+    image: ghcr.io/mbeczynski/ogrodnik-db:latest
+    container_name: ogrodnik-db
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8082:8080"
+    volumes:
+      - ogrodnik_data:/data
+    environment:
+      - SQLITE_DATABASE=ogrodnik.db
+    depends_on:
+      - ogrodnik-ai
+
 volumes:
   ogrodnik_data:
+

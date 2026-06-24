@@ -23,6 +23,9 @@ class Settings(BaseSettings):
 
     poll_interval_minutes: int = 5
 
+    admin_username: str = "admin"
+    admin_password: str = "MojeSilneHasloOgrodnika"
+
     data_dir: Path = ROOT_DIR / "data"
     photos_dir: Path = ROOT_DIR / "data" / "photos"
     maps_dir: Path = ROOT_DIR / "data" / "maps"
