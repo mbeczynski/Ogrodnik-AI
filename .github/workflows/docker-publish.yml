@@ -72,31 +72,4 @@ jobs:
           cache-from: type=gha,scope=ogrodnik-db
           cache-to: type=gha,mode=max,scope=ogrodnik-db
 
-  deploy:
-    name: Wdrożenie na serwer produkcyjny (CD)
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    steps:
-      - name: SSH - helm upgrade && kubectl rollout restart + weryfikacja
-        uses: appleboy/ssh-action@v1.2.4
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_SSH_PORT || 22 }}
-          script: |
-            set -e
-            export KUBECONFIG=/home/deploy/.kube/config
 
-            cd /opt/ogrodnik-ai
-            # Synchronizacja kodu repozytorium na serwerze (dla plików chartu Helm)
-            git pull origin main || true
-
-            echo "=== Wdrażanie Chartu Helm ==="
-            helm upgrade --install ogrodnik /opt/ogrodnik-ai/charts/ogrodnik --namespace default
-
-            echo "=== Restartowanie Deploymentu (wymuszenie pobrania najnowszego obrazu :latest) ==="
-            kubectl rollout restart deployment/ogrodnik
-
-            echo "=== Oczekiwanie na status Healthy ==="
-            kubectl rollout status deployment/ogrodnik --timeout=120s
