@@ -13,7 +13,6 @@ Webowy dashboard ogrodowy, który łączy w jednym miejscu:
 Wszystkie zebrane dane trzymane są we własnej bazie SQLite, bo domyślny rekorder
 Home Assistant przechowuje historię tylko ~10 dni.
 
-Pełny opis architektury i decyzji projektowych: [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## Funkcje
 
